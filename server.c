@@ -9,6 +9,14 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
+#include<sys/epoll.h>
+#define MAX_EVENTS 100
+
+struct custom_data {
+    int fd;
+    SSL *ssl;
+};
+
 int sendall(SSL *ssl, void *msg, int len)
 {
     char *ptr = (char *)msg;
@@ -88,6 +96,22 @@ int main()
         printf("error in listening");
         return 0;
     }
+    int epoll_fd=epoll_create1(0);
+    
+    struct custom_data *s_data = malloc(sizeof(struct custom_data));
+    s_data->fd = server_fd;
+    s_data->ssl = NULL;
+    
+    struct epoll_event event;
+    event.events=EPOLLIN;
+    event.data.ptr=s_data;
+    epoll_ctl(epoll_fd,EPOLL_CTL_ADD,server_fd,&event);
+    struct epoll_event events[MAX_EVENTS];
+    while(1){
+    int ready=epoll_wait(epoll_fd,events,MAX_EVENTS,-1);
+    for(int i=0;i<ready;i++){
+    struct custom_data *active_data = (struct custom_data *)events[i].data.ptr;
+    if(active_data->fd==server_fd){
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
     int client_fd = accept(server_fd, NULL, NULL);
@@ -102,7 +126,7 @@ int main()
     if (ctx == NULL)
     {
         printf("error");
-        exit(1);
+       exit(1);
     }
     SSL_CTX_use_certificate_file(ctx, "cert.pem", SSL_FILETYPE_PEM);
     SSL_CTX_use_PrivateKey_file(ctx, "key.pem", SSL_FILETYPE_PEM);
@@ -115,6 +139,15 @@ int main()
         printf("error");
         exit(1);
     }
+    struct custom_data *c_data = malloc(sizeof(struct custom_data));
+    c_data->fd = client_fd;
+    c_data->ssl = ssl;
+    struct epoll_event client_event;
+                client_event.events = EPOLLIN;
+                client_event.data.ptr = c_data;
+                epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &client_event);}
+else{
+    SSL *ssl = active_data->ssl;
     while (1)
     {
         char f[2048] = {0};
@@ -124,7 +157,7 @@ int main()
             printf("error\n");
             break;
         }
-        printf("client reqs -: %s", f);
+        printf("client reqs:- %s", f);
         char buffer[2048];
         printf("> ");
         fgets(buffer, sizeof(buffer), stdin);
@@ -138,6 +171,9 @@ int main()
             printf("error\n");
             break;
         }
+    }
+  }
+}
     }
     return 0;
 }
