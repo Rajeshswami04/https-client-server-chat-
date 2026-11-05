@@ -1,25 +1,30 @@
-# TLS Client-Server Chat
+# TLS Client–Server Chat in C
 
-A small command-line chat application written in C. The server and client communicate over a TCP connection protected by TLS using OpenSSL. Messages are exchanged one at a time: the client sends a message, then the server replies.
+A command-line chat application written in C. The client and server exchange messages over a TCP connection protected by TLS using OpenSSL. The server uses `epoll` to watch for client sockets and prompts for a reply whenever a client sends a message.
+
+## Demo
+
+The screenshot below shows the server and two client sessions exchanging messages:
+
+![TLS chat running in server and client terminals](ss.png)
 
 ## Requirements
 
 - GCC or another C compiler
 - OpenSSL development headers and libraries
-- The OpenSSL command-line tool (to create a local certificate)
+- The OpenSSL command-line tool, to create a local certificate
+- Linux or another Unix-like system (the code uses POSIX socket APIs and Linux `epoll`)
 
-The source uses POSIX socket APIs, so these instructions target Linux and other Unix-like systems.
+## Set up a local certificate
 
-## Create a certificate
-
-Both programs expect `cert.pem` and `key.pem` in the directory from which they are run. For local testing, create a self-signed certificate:
+Both programs expect `cert.pem` and `key.pem` in the directory where they are run. Create a self-signed certificate for local testing:
 
 ```sh
 openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem \
   -days 365 -nodes -subj "/CN=localhost"
 ```
 
-The client uses `cert.pem` as a trusted certificate. Keep `key.pem private`; do not share or commit it.
+The client trusts `cert.pem`. Keep `key.pem` private; never publish it.
 
 ## Build
 
@@ -30,32 +35,30 @@ gcc server.c -o server -lssl -lcrypto
 gcc client.c -o client -lssl -lcrypto
 ```
 
-If OpenSSL is installed in a non-standard location, provide the appropriate include and library paths to your compiler.
-
 ## Run
 
-Open two terminals in the project directory. Start the server first:
+Open a terminal and start the server:
 
 ```sh
 ./server
 ```
 
-Then start the client:
+In another terminal, start a client:
 
 ```sh
 ./client
 ```
 
-Type a message at the client prompt and press Enter. The server displays it and prompts the operator for a reply; the client displays that reply. Repeat to continue the conversation.
+Type a message at the client prompt and press Enter. The server prints the message and prompts its operator for a reply, which is returned to that client. Start additional client processes to connect more clients. Enter `quit` at a client prompt to exit that client; enter `quit` at the server's reply prompt to close the current client connection. Stop the server with Ctrl+C.
 
-The server listens on TCP port `8080` on all network interfaces. The client connects to `127.0.0.1:8080`, so the default setup is for both programs to run on the same machine. To connect from another machine, update the address in `client.c` and ensure the server's port is reachable.
+The server listens on port `8080` on all network interfaces. The client connects to `127.0.0.1:8080`, so by default both run on the same machine. To connect from another machine, update the address in `client.c` and allow inbound connections to port `8080` in the server's firewall.
 
 ## Message format
 
-Each message is sent over TLS as a four-byte unsigned length in network byte order, followed by that many message bytes. The receive buffers allow at most 2047 message bytes.
+Each message is sent over TLS as a four-byte unsigned length in network byte order, followed by the message bytes. Messages are limited to 2047 bytes.
 
-## Current limitations
+## Limitations and security notes
 
-- The server accepts one client connection and handles messages synchronously; it does not support multiple simultaneous clients.
-- The client checks for `quit` locally before sending a message. This exits the client but does not notify the server, so stop the server separately (for example, with Ctrl+C).
-- The client trusts the provided certificate but does not verify that its identity matches the server address. This example is for learning and local testing, not production use.
+- The server handles TLS reads and replies synchronously. A slow or idle client can block the server while it waits for a message, and the server operator replies to one client at a time.
+- The client trusts the supplied certificate but does not verify that its identity matches the server address. The self-signed certificate setup is for learning and local testing, not production use.
+- Use a trusted certificate, hostname verification, and proper certificate and key handling before exposing a service beyond local testing.
