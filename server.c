@@ -9,7 +9,8 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdint.h>
-#include<sys/epoll.h>
+#include <sys/epoll.h>
+
 #define MAX_EVENTS 100
 
 struct custom_data {
@@ -32,6 +33,7 @@ int sendall(SSL *ssl, void *msg, int len)
     }
     return 1;
 }
+
 int recvall(SSL *ssl, void *msg, int len)
 {
     char *ptr = (char *)msg;
@@ -45,8 +47,9 @@ int recvall(SSL *ssl, void *msg, int len)
         }
         rcvd += temp;
     }
-   return 1;
+    return 1;
 }
+
 int sendamsg(SSL *ssl, char *msg)
 {
     uint32_t len = strlen(msg);
@@ -59,6 +62,7 @@ int sendamsg(SSL *ssl, char *msg)
         return -1;
     return 1;
 }
+
 int recvamsg(SSL *ssl, char *buffer)
 {
     uint32_t len;
@@ -72,6 +76,7 @@ int recvamsg(SSL *ssl, char *buffer)
     buffer[lenn] = '\0';
     return 1;
 }
+
 int main()
 {
     int server_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -148,32 +153,47 @@ int main()
                 epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &client_event);}
 else{
     SSL *ssl = active_data->ssl;
-    while (1)
-    {
         char f[2048] = {0};
         int d = recvamsg(ssl, f);
         if (d < 0)
         {
-            printf("error\n");
-            break;
+            printf("client %d disconnected\n", active_data->fd);
+            epoll_ctl(epoll_fd, EPOLL_CTL_DEL, active_data->fd, NULL);
+            SSL_shutdown(ssl);
+            SSL_free(ssl);
+            close(active_data->fd);
+            free(active_data);
+            continue;
         }
-        printf("client reqs:- %s", f);
+        printf("client ");
+        printf("%i",active_data->fd);
+        printf(" reqs -> %s ",f);
         char buffer[2048];
         printf("> ");
         fgets(buffer, sizeof(buffer), stdin);
         if (strncmp(buffer, "quit", 4) == 0)
         {
-            break;
+            epoll_ctl(epoll_fd, EPOLL_CTL_DEL, active_data->fd, NULL);
+            SSL_shutdown(ssl);
+            SSL_free(ssl);
+            close(active_data->fd);
+            free(active_data);
+            continue;
         }
         d = sendamsg(ssl, buffer);
         if (d < 0)
         {
-            printf("error\n");
-            break;
+            printf("error sending to client %d\n", active_data->fd);
+            epoll_ctl(epoll_fd, EPOLL_CTL_DEL, active_data->fd, NULL);
+            SSL_shutdown(ssl);
+            SSL_free(ssl);
+            close(active_data->fd);
+            free(active_data);
+            continue;
         }
-    }
+    
   }
-}
+}   
     }
     return 0;
 }
